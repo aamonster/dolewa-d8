@@ -21,6 +21,19 @@ const renderBtn=document.getElementById("renderBtn");
 const connectBtn=document.getElementById("connectBtn");
 const printBtn=document.getElementById("printBtn");
 const clearBtn=document.getElementById("clearBtn");
+const pageModified=document.getElementById("pageModified");
+async function showPageModified() {
+  try {
+    const response=await fetch(location.href, {method:"HEAD", cache:"no-store"});
+    const modified=response.headers.get("Last-Modified");
+    if (modified) {
+      pageModified.textContent=" (" + new Date(modified).toLocaleString() + ")";
+    }
+  } catch (e) {
+    console.warn("Could not read page modification date:", e);
+  }
+}
+showPageModified();
 const PRINT_WIDTH=384;
 const BLOCK_SIZE=96;
 let textRenderTimer=null;
