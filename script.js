@@ -13,6 +13,8 @@ const renderFrame=document.getElementById("renderFrame");
 const previewCanvas=document.getElementById("previewCanvas");
 const info=document.getElementById("info");
 const status=document.getElementById("status");
+const debugCheck=document.getElementById("debugCheck");
+const debugLog=document.getElementById("debugLog");
 const renderBtn=document.getElementById("renderBtn");
 const connectBtn=document.getElementById("connectBtn");
 const printBtn=document.getElementById("printBtn");
@@ -25,6 +27,28 @@ function setStatus(message) {
   status.textContent=message;
   console.log(message);
 }
+function debug(message, data) {
+  if (!debugCheck.checked) return;
+  const time = new Date().toLocaleTimeString();
+  let line = "[" + time + "] " + message;
+  if (data !== undefined) {
+    try {
+      line += " " + (typeof data === "string" ? data : JSON.stringify(data));
+    } catch (_) {
+      line += " " + String(data);
+    }
+  }
+  console.log("[BLE DEBUG]", line);
+  debugLog.textContent += line + "\\n";
+  debugLog.scrollTop = debugLog.scrollHeight;
+}
+debugCheck.addEventListener("change", () => {
+  debugLog.hidden = !debugCheck.checked;
+  if (debugCheck.checked) {
+    debugLog.textContent = "";
+    debug("Debug logging enabled");
+  }
+});
 function encodeBase64UTF8(str) {
   const bytes = new TextEncoder().encode(str);
   let binary = "";
@@ -411,27 +435,63 @@ function crc16Xmodem(data) {
   return crc;
 }
 async function connectPrinter() {
-  if (!navigator.bluetooth)throw new Error("Web Bluetooth is not supported by this browser");
+  debug("connectPrinter() started");
+  if (!navigator.bluetooth) {
+    debug("Web Bluetooth unavailable");
+    throw new Error("Web Bluetooth is not supported by this browser");
+  }
+
   setStatus("Scanning for LX-D08...");
-  bluetoothDevice=await navigator.bluetooth.requestDevice( {
-    filters:[ {
-      name:"LX-D08"
-    }],optionalServices:[SERVICE_UUID]
+  debug("Calling requestDevice()", {filters:[{name:"LX-D08"}], optionalServices:[SERVICE_UUID]});
+  bluetoothDevice=await navigator.bluetooth.requestDevice({
+    filters:[{name:"LX-D08"}],
+    optionalServices:[SERVICE_UUID]
   });
+  debug("Device selected", {
+    name: bluetoothDevice.name,
+    id: bluetoothDevice.id,
+    gattAvailable: !!bluetoothDevice.gatt
+  });
+
   bluetoothDevice.addEventListener("gattserverdisconnected",()=> {
+    debug("Event: gattserverdisconnected");
     setStatus("Printer disconnected");
   });
+
   setStatus("Connecting to "+(bluetoothDevice.name||"printer")+"...");
+  debug("Step 1/6: calling device.gatt.connect()");
   const server=await bluetoothDevice.gatt.connect();
+  debug("Step 1/6 complete: GATT connected", {connected:server.connected});
+
+  debug("Step 2/6: getPrimaryService()", SERVICE_UUID);
   const service=await server.getPrimaryService(SERVICE_UUID);
+  debug("Step 2/6 complete: service found", service.uuid);
+
+  debug("Step 3/6: get write characteristic", WRITE_UUID);
   writeCharacteristic=await service.getCharacteristic(WRITE_UUID);
+  debug("Step 3/6 complete: write characteristic found", {
+    uuid:writeCharacteristic.uuid,
+    properties:writeCharacteristic.properties
+  });
+
+  debug("Step 4/6: get notify characteristic", NOTIFY_UUID);
   notifyCharacteristic=await service.getCharacteristic(NOTIFY_UUID);
+  debug("Step 4/6 complete: notify characteristic found", {
+    uuid:notifyCharacteristic.uuid,
+    properties:notifyCharacteristic.properties
+  });
+
   rxQueue=[];
   rxWaiters=[];
   notifyCharacteristic.addEventListener("characteristicvaluechanged",onNotification);
+  debug("Step 5/6: startNotifications()");
   await notifyCharacteristic.startNotifications();
+  debug("Step 5/6 complete: notifications started");
+
   setStatus("Connected. Handshaking...");
+  debug("Step 6/6: starting handshake()");
   await handshake();
+  debug("Step 6/6 complete: handshake finished");
   setStatus("Printer ready");
 }
 async function handshake() {
