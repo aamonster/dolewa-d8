@@ -178,6 +178,13 @@ async function renderCanvas() {
   const scaleFactor=Number(scale.value)/100;
   const body=document.body;
   const width=Math.max(1,body.scrollWidth);
+  // CSS pixels are 96 dpi, while the printer is 384 px / 58 mm.
+  // At scale 100%, map CSS physical units to the printer's physical resolution:
+  // 58 mm in CSS (≈219.21 px) becomes exactly 384 printer pixels.
+  const cssPxPerMm=96/25.4;
+  const printerPxPerMm=PRINT_WIDTH/58;
+  const physicalScale=printerPxPerMm/cssPxPerMm;
+  const renderScale=scaleFactor*physicalScale;
   const height=Math.max(1,body.scrollHeight);
 
   // Render the already laid-out DOM through Chrome's SVG foreignObject renderer.
@@ -191,7 +198,7 @@ async function renderCanvas() {
   const svg=
     '<svg xmlns="http://www.w3.org/2000/svg" '+
     'xmlns:xhtml="http://www.w3.org/1999/xhtml" '+
-    'width="'+(width*scaleFactor)+'" height="'+(height*scaleFactor)+'" '+
+    'width="'+(width*renderScale)+'" height="'+(height*renderScale)+'" '+
     'viewBox="0 0 '+width+' '+height+'">'+
     '<foreignObject x="0" y="0" width="'+width+'" height="'+height+'">'+
     serialized+
@@ -209,8 +216,8 @@ async function renderCanvas() {
   });
 
   const canvas=document.createElement("canvas");
-    canvas.width=Math.max(1,Math.round(width*scaleFactor));
-    canvas.height=Math.max(1,Math.round(height*scaleFactor));
+    canvas.width=Math.max(1,Math.round(width*renderScale));
+    canvas.height=Math.max(1,Math.round(height*renderScale));
     const ctx=canvas.getContext("2d");
     ctx.fillStyle="#ffffff";
     ctx.fillRect(0,0,canvas.width,canvas.height);
