@@ -61,7 +61,10 @@
     </div>
 
     <div id="status">Ready</div>
-    <pre id="debugLog" hidden></pre>
+    <div id="debugPanel" hidden>
+        <textarea id="debugLog" readonly spellcheck="false" aria-label="Debug log"></textarea>
+        <button id="copyDebugBtn" type="button">Copy log</button>
+    </div>
 
     <iframe id="renderFrame" title="Print preview source"></iframe>
 
