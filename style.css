@@ -41,14 +41,16 @@ h1 {
 
 #darkness,
 #contrast,
-#density {
+#density,
+#scale {
     width: 160px;
     vertical-align: middle;
 }
 
 #darknessValue,
 #contrastValue,
-#densityValue {
+#densityValue,
+#scaleValue {
     display: inline-block;
     width: 28px;
     text-align: right;
