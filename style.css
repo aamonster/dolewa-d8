@@ -110,6 +110,7 @@ button {
     font-family: Arial, sans-serif;
     font-size: 24pt;
     line-height: 1.2;
+    --text-scale: 1;
     overflow: visible;
 }
 

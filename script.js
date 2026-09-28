@@ -7,6 +7,8 @@ const contrast=document.getElementById("contrast");
 const contrastValue=document.getElementById("contrastValue");
 const density=document.getElementById("density");
 const densityValue=document.getElementById("densityValue");
+const textSize=document.getElementById("textSize");
+const textSizeValue=document.getElementById("textSizeValue");
 const renderTarget=document.getElementById("renderTarget");
 const previewCanvas=document.getElementById("previewCanvas");
 const info=document.getElementById("info");
@@ -62,6 +64,7 @@ function updateHtmlHash() {
   params.set("darkness",darkness.value);
   params.set("contrast",contrast.value);
   params.set("density",density.value);
+  params.set("textSize",textSize.value);
   history.replaceState(null,"","#"+params.toString());
 }
 function loadHtmlFromHash() {
@@ -87,9 +90,15 @@ function loadHtmlFromHash() {
       const value=Number(savedDensity);
       if (Number.isFinite(value)&&value>=0&&value<=7)density.value=Math.round(value);
     }
+    const savedTextSize=params.get("textSize");
+    if (savedTextSize!==null) {
+      const value=Number(savedTextSize);
+      if (Number.isFinite(value)&&value>=50&&value<=200)textSize.value=Math.round(value/10)*10;
+    }
     updateDarknessLabel();
     updateContrastLabel();
     updateDensityLabel();
+    updateTextSize();
     updateContrastState();
     return true;
   }
@@ -107,6 +116,14 @@ function updateContrastLabel() {
 }
 function updateDensityLabel() {
   densityValue.textContent=density.value;
+}
+function updateTextSizeLabel() {
+  textSizeValue.textContent=textSize.value+"%";
+}
+function updateTextSize() {
+  const scale=Number(textSize.value)/100;
+  renderTarget.style.fontSize=(24*scale)+"pt";
+  updateTextSizeLabel();
 }
 function updateContrastState() {
   contrast.disabled=!dithering.checked;
@@ -435,10 +452,15 @@ density.addEventListener("input",()=> {
   updateDensityLabel();
   updateHtmlHash();
 });
+textSize.addEventListener("input",async()=> {
+  updateTextSize();
+  await renderPreview();
+});
 (async function init() {
   updateDarknessLabel();
   updateContrastLabel();
   updateDensityLabel();
+  updateTextSizeLabel();
   const loaded=loadHtmlFromHash();
   updateDarknessLabel();
   updateContrastLabel();
