@@ -388,16 +388,12 @@ function rasterize(canvas) {
    ============================================================ */
 
 function showPreview(raster) {
-    const scale = 1;
-
     previewCanvas.width = raster.width;
     previewCanvas.height = raster.height;
 
-    previewCanvas.style.width =
-        (raster.width / 8) + "mm";
-
-    previewCanvas.style.height =
-        (raster.height / 8) + "mm";
+    // Показываем 1:1 — 384 пикселя принтера = 384 CSS-пикселя
+    previewCanvas.style.width = raster.width + "px";
+    previewCanvas.style.height = raster.height + "px";
 
     const ctx = previewCanvas.getContext("2d");
 
@@ -453,7 +449,6 @@ function showPreview(raster) {
         raster.data.length +
         " bytes";
 }
-
 /* ============================================================
    BLE
    ============================================================ */
