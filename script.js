@@ -9,7 +9,7 @@ const density=document.getElementById("density");
 const densityValue=document.getElementById("densityValue");
 const textSize=document.getElementById("textSize");
 const textSizeValue=document.getElementById("textSizeValue");
-const renderTarget=document.getElementById("renderTarget");
+const renderFrame=document.getElementById("renderFrame");
 const previewCanvas=document.getElementById("previewCanvas");
 const info=document.getElementById("info");
 const status=document.getElementById("status");
@@ -122,15 +122,36 @@ function updateTextSizeLabel() {
 }
 function updateTextSize() {
   const scale=Number(textSize.value)/100;
-  renderTarget.style.fontSize=(24*scale)+"pt";
+  renderFrame.style.setProperty("--text-scale",scale);
   updateTextSizeLabel();
 }
 function updateContrastState() {
   contrast.disabled=!dithering.checked;
 }
 async function renderDOM() {
-  renderTarget.innerHTML=editor.value;
-  const images=[...renderTarget.querySelectorAll("img")];
+  renderFrame.srcdoc=editor.value;
+
+  await new Promise((resolve,reject)=> {
+    const onLoad=()=> {
+      cleanup();
+      resolve();
+    };
+    const onError=()=> {
+      cleanup();
+      reject(new Error("Render frame failed to load"));
+    };
+    const cleanup=()=> {
+      renderFrame.removeEventListener("load",onLoad);
+      renderFrame.removeEventListener("error",onError);
+    };
+
+    renderFrame.addEventListener("load",onLoad,{once:true});
+    renderFrame.addEventListener("error",onError,{once:true});
+  });
+
+  const document=renderFrame.contentDocument;
+  const images=[...document.images];
+
   await Promise.all(images.map(img=> {
     if (img.complete)return Promise.resolve();
     return new Promise(resolve=> {
@@ -138,8 +159,12 @@ async function renderDOM() {
       img.onerror=resolve;
     });
   }));
+
+  if (document.fonts)await document.fonts.ready;
+
   await new Promise(resolve=>requestAnimationFrame(resolve));
-  return renderTarget;
+
+  return document.body;
 }
 async function renderPreview() {
   const generation=++renderGeneration;
@@ -148,7 +173,7 @@ async function renderPreview() {
     updateHtmlHash();
     await renderDOM();
     if (generation!==renderGeneration)return null;
-    const canvas=await html2canvas(renderTarget, {
+    const canvas=await html2canvas(await renderDOM(), {
       backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
     });
     if (generation!==renderGeneration)return null;
@@ -419,7 +444,7 @@ printBtn.addEventListener("click",async()=> {
   try {
     setStatus("Rendering for print...");
     await renderDOM();
-    const canvas=await html2canvas(renderTarget, {
+    const canvas=await html2canvas(await renderDOM(), {
       backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
     });
     const raster=rasterize(canvas);
