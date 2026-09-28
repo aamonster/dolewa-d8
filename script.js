@@ -431,8 +431,30 @@ function waitForPacket(timeout=5000) {
   });
 }
 async function writeBytes(bytes) {
-  console.log("TX:",bytesToHex(bytes));
-  await writeCharacteristic.writeValueWithResponse(new Uint8Array(bytes));
+  const data=new Uint8Array(bytes);
+  const hex=bytesToHex(data);
+  console.log("TX:",hex);
+
+  if (writeCharacteristic.properties.write) {
+    debug("GATT write: trying with response", hex);
+    try {
+      await writeCharacteristic.writeValueWithResponse(data);
+      debug("GATT write with response: OK");
+      return;
+    } catch (e) {
+      debug("GATT write with response failed", {name:e.name, message:e.message});
+      if (!writeCharacteristic.properties.writeWithoutResponse) throw e;
+    }
+  }
+
+  if (writeCharacteristic.properties.writeWithoutResponse) {
+    debug("GATT write: trying without response", hex);
+    await writeCharacteristic.writeValueWithoutResponse(data);
+    debug("GATT write without response: OK");
+    return;
+  }
+
+  throw new Error("Write characteristic supports neither write nor writeWithoutResponse");
 }
 function crc16Xmodem(data) {
   let crc=0x0000;
