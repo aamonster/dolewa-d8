@@ -98,7 +98,7 @@ function loadHtmlFromHash() {
     updateDarknessLabel();
     updateContrastLabel();
     updateDensityLabel();
-    updateTextSize();
+    updateScale();
     updateContrastState();
     return true;
   }
@@ -117,16 +117,11 @@ function updateContrastLabel() {
 function updateDensityLabel() {
   densityValue.textContent=density.value;
 }
-function updateTextSizeLabel() {
+function updateScaleLabel() {
   scaleValue.textContent=scale.value+"%";
 }
-function updateTextSize() {
-  updateTextSizeLabel();
-
-  const document=renderFrame.contentDocument;
-  if (document?.documentElement) {
-    
-  }
+function updateScale() {
+  updateScaleLabel();
 }
 function updateContrastState() {
   contrast.disabled=!dithering.checked;
@@ -176,15 +171,44 @@ async function renderDOM() {
 
   return document.body;
 }
+async function renderCanvas() {
+  const document=renderFrame.contentDocument;
+  if (!document)throw new Error("Render frame is not ready");
+
+  const scaleFactor=Number(scale.value)/100;
+  const root=document.documentElement;
+  const previousTransform=root.style.transform;
+  const previousOrigin=root.style.transformOrigin;
+  const previousWidth=root.style.width;
+
+  // html2canvas has limited transform support, so render directly at the requested scale.
+  root.style.transform="none";
+  root.style.transformOrigin="";
+  root.style.width="";
+
+  try {
+    return await html2canvas(document.body, {
+      backgroundColor:"#ffffff",
+      width:PRINT_WIDTH,
+      scale:scaleFactor,
+      useCORS:true,
+      allowTaint:false,
+      logging:false
+    });
+  }
+  finally {
+    root.style.transform=previousTransform;
+    root.style.transformOrigin=previousOrigin;
+    root.style.width=previousWidth;
+  }
+}
 async function renderPreview() {
   const generation=++renderGeneration;
   try {
     setStatus("Rendering...");
     updateHtmlHash();
     if (generation!==renderGeneration)return null;
-    const canvas=await html2canvas(await renderDOM(), {
-      backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
-    });
+    const canvas=await renderCanvas();
     if (generation!==renderGeneration)return null;
     const raster=rasterize(canvas);
     showPreview(raster);
@@ -493,7 +517,7 @@ scale.addEventListener("input",async()=> {
   updateDarknessLabel();
   updateContrastLabel();
   updateDensityLabel();
-  updateTextSizeLabel();
+  updateScaleLabel();
   const loaded=loadHtmlFromHash();
   updateDarknessLabel();
   updateContrastLabel();
