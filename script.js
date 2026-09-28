@@ -15,6 +15,8 @@ const info=document.getElementById("info");
 const status=document.getElementById("status");
 const debugCheck=document.getElementById("debugCheck");
 const debugLog=document.getElementById("debugLog");
+const debugPanel=document.getElementById("debugPanel");
+const copyDebugBtn=document.getElementById("copyDebugBtn");
 const renderBtn=document.getElementById("renderBtn");
 const connectBtn=document.getElementById("connectBtn");
 const printBtn=document.getElementById("printBtn");
@@ -39,14 +41,25 @@ function debug(message, data) {
     }
   }
   console.log("[BLE DEBUG]", line);
-  debugLog.textContent += line + "\n";
+  debugLog.value += line + "\n";
   debugLog.scrollTop = debugLog.scrollHeight;
 }
 debugCheck.addEventListener("change", () => {
-  debugLog.hidden = !debugCheck.checked;
+  debugPanel.hidden = !debugCheck.checked;
   if (debugCheck.checked) {
     debugLog.textContent = "";
     debug("Debug logging enabled");
+  }
+});
+
+copyDebugBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(debugLog.value);
+    copyDebugBtn.textContent = "Copied";
+    setTimeout(() => copyDebugBtn.textContent = "Copy log", 1000);
+  } catch (e) {
+    debugLog.focus();
+    debugLog.select();
   }
 });
 function encodeBase64UTF8(str) {
