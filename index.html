@@ -1,29 +1,62 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dolewa D8 Printer</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dolewa D8 Printer</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-<h1>Dolewa D8</h1>
-<textarea id="editor" placeholder="Введите HTML, например: <b>Hello</b>"></textarea>
-<div class="options">
-<label><input type="checkbox" id="dithering"> Dithering</label>
-<label>Darkness <input type="range" id="darkness" min="0" max="255" value="128"><span id="darknessValue">128</span></label>
-<label>Contrast <input type="range" id="contrast" min="0" max="255" value="0" disabled><span id="contrastValue">0</span></label>
-<label>Print density <input type="range" id="density" min="0" max="7" value="3"><span id="densityValue">3</span></label>
-</div>
-<div class="actions">
-<button id="connectBtn">Connect printer</button>
-<button id="printBtn">Print</button>
-<button id="clearBtn">Clear</button>
-</div>
-<div id="previewWrap"><canvas id="previewCanvas"></canvas><div id="info"></div></div>
-<div id="status">Ready</div>
-<div id="renderTarget"></div>
-<script src="script.js"></script>
+    <h1>Dolewa D8</h1>
+
+    <textarea
+        id="editor"
+        placeholder="Введите HTML, например: <b>Hello</b>"
+    ></textarea>
+
+    <div class="options">
+        <label>
+            <input type="checkbox" id="dithering">
+            Dithering
+        </label>
+
+        <label>
+            Darkness
+            <input type="range" id="darkness" min="0" max="255" value="128">
+            <span id="darknessValue">128</span>
+        </label>
+
+        <label>
+            Contrast
+            <input type="range" id="contrast" min="0" max="255" value="0" disabled>
+            <span id="contrastValue">0</span>
+        </label>
+
+        <label>
+            Print density
+            <input type="range" id="density" min="0" max="7" value="3">
+            <span id="densityValue">3</span>
+        </label>
+    </div>
+
+    <div class="actions">
+        <button id="connectBtn">Connect printer</button>
+        <button id="printBtn">Print</button>
+        <button id="clearBtn">Clear</button>
+    </div>
+
+    <div id="previewWrap">
+        <canvas id="previewCanvas"></canvas>
+        <div id="info"></div>
+    </div>
+
+    <div id="status">Ready</div>
+
+    <div id="renderTarget"></div>
+
+    <script src="script.js"></script>
 </body>
 </html>
