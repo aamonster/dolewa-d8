@@ -176,30 +176,49 @@ async function renderCanvas() {
   if (!document)throw new Error("Render frame is not ready");
 
   const scaleFactor=Number(scale.value)/100;
-  const root=document.documentElement;
-  const previousTransform=root.style.transform;
-  const previousOrigin=root.style.transformOrigin;
-  const previousWidth=root.style.width;
+  const body=document.body;
+  const width=Math.max(1,body.scrollWidth);
+  const height=Math.max(1,body.scrollHeight);
 
-  // html2canvas has limited transform support, so render directly at the requested scale.
-  root.style.transform="none";
-  root.style.transformOrigin="";
-  root.style.width="";
+  // Render the already laid-out DOM through Chrome's SVG foreignObject renderer.
+  // This avoids html2canvas reinterpreting the page's CSS/layout.
+  const cloned=document.documentElement.cloneNode(true);
+  cloned.style.transform="none";
+  cloned.style.transformOrigin="";
+  cloned.style.width="";
+
+  const serialized=new XMLSerializer().serializeToString(cloned);
+  const svg=
+    '<svg xmlns="http://www.w3.org/2000/svg" '+
+    'xmlns:xhtml="http://www.w3.org/1999/xhtml" '+
+    'width="'+(width*scaleFactor)+'" height="'+(height*scaleFactor)+'" '+
+    'viewBox="0 0 '+width+' '+height+'">'+
+    '<foreignObject x="0" y="0" width="'+width+'" height="'+height+'">'+
+    serialized+
+    '</foreignObject></svg>';
+
+  const blob=new Blob([svg],{type:"image/svg+xml"});
+  const url=URL.createObjectURL(blob);
 
   try {
-    return await html2canvas(document.body, {
-      backgroundColor:"#ffffff",
-      width:PRINT_WIDTH,
-      scale:scaleFactor,
-      useCORS:true,
-      allowTaint:false,
-      logging:false
+    const image=new Image();
+    await new Promise((resolve,reject)=> {
+      image.onload=resolve;
+      image.onerror=()=>reject(new Error("SVG DOM render failed"));
+      image.src=url;
     });
+
+    const canvas=document.createElement("canvas");
+    canvas.width=Math.max(1,Math.round(width*scaleFactor));
+    canvas.height=Math.max(1,Math.round(height*scaleFactor));
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    return canvas;
   }
   finally {
-    root.style.transform=previousTransform;
-    root.style.transformOrigin=previousOrigin;
-    root.style.width=previousWidth;
+    URL.revokeObjectURL(url);
   }
 }
 async function renderPreview() {
@@ -476,9 +495,8 @@ connectBtn.addEventListener("click",async()=> {
 printBtn.addEventListener("click",async()=> {
   try {
     setStatus("Rendering for print...");
-    const canvas=await html2canvas(await renderDOM(), {
-      backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
-    });
+    await renderDOM();
+    const canvas=await renderCanvas();
     const raster=rasterize(canvas);
     showPreview(raster);
     await printRaster(raster);
