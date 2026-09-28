@@ -7,8 +7,8 @@ const contrast=document.getElementById("contrast");
 const contrastValue=document.getElementById("contrastValue");
 const density=document.getElementById("density");
 const densityValue=document.getElementById("densityValue");
-const textSize=document.getElementById("textSize");
-const textSizeValue=document.getElementById("textSizeValue");
+const scale=document.getElementById("scale");
+const scaleValue=document.getElementById("scaleValue");
 const renderFrame=document.getElementById("renderFrame");
 const previewCanvas=document.getElementById("previewCanvas");
 const info=document.getElementById("info");
@@ -64,7 +64,7 @@ function updateHtmlHash() {
   params.set("darkness",darkness.value);
   params.set("contrast",contrast.value);
   params.set("density",density.value);
-  params.set("textSize",textSize.value);
+  params.set("scale",scale.value);
   history.replaceState(null,"","#"+params.toString());
 }
 function loadHtmlFromHash() {
@@ -90,10 +90,10 @@ function loadHtmlFromHash() {
       const value=Number(savedDensity);
       if (Number.isFinite(value)&&value>=0&&value<=7)density.value=Math.round(value);
     }
-    const savedTextSize=params.get("textSize");
+    const savedTextSize=params.get("scale");
     if (savedTextSize!==null) {
       const value=Number(savedTextSize);
-      if (Number.isFinite(value)&&value>=50&&value<=200)textSize.value=Math.round(value/10)*10;
+      if (Number.isFinite(value)&&value>=50&&value<=200)scale.value=Math.round(value/10)*10;
     }
     updateDarknessLabel();
     updateContrastLabel();
@@ -118,14 +118,14 @@ function updateDensityLabel() {
   densityValue.textContent=density.value;
 }
 function updateTextSizeLabel() {
-  textSizeValue.textContent=textSize.value+"%";
+  scaleValue.textContent=scale.value+"%";
 }
 function updateTextSize() {
   updateTextSizeLabel();
 
   const document=renderFrame.contentDocument;
   if (document?.documentElement) {
-    document.documentElement.style.zoom=Number(textSize.value)/100;
+    
   }
 }
 function updateContrastState() {
@@ -153,9 +153,12 @@ async function renderDOM() {
   });
 
   const document=renderFrame.contentDocument;
+  const scaleFactor=Number(scale.value)/100;
 
-  // Scale the complete rendered document, including text, images and layout.
-  document.documentElement.style.zoom=Number(textSize.value)/100;
+  // Transform the rendered document so html2canvas captures the actual visual scale.
+  document.documentElement.style.transformOrigin="top left";
+  document.documentElement.style.transform="scale("+scaleFactor+")";
+  document.documentElement.style.width=(100/scaleFactor)+"%";
 
   const images=[...document.images];
 
@@ -482,8 +485,8 @@ density.addEventListener("input",()=> {
   updateDensityLabel();
   updateHtmlHash();
 });
-textSize.addEventListener("input",async()=> {
-  updateTextSize();
+scale.addEventListener("input",async()=> {
+  updateScale();
   await renderPreview();
 });
 (async function init() {
