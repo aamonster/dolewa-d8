@@ -121,9 +121,12 @@ function updateTextSizeLabel() {
   textSizeValue.textContent=textSize.value+"%";
 }
 function updateTextSize() {
-  const scale=Number(textSize.value)/100;
-  renderFrame.style.setProperty("--text-scale",scale);
   updateTextSizeLabel();
+
+  const document=renderFrame.contentDocument;
+  if (document?.documentElement) {
+    document.documentElement.style.zoom=Number(textSize.value)/100;
+  }
 }
 function updateContrastState() {
   contrast.disabled=!dithering.checked;
@@ -150,6 +153,10 @@ async function renderDOM() {
   });
 
   const document=renderFrame.contentDocument;
+
+  // Scale the complete rendered document, including text, images and layout.
+  document.documentElement.style.zoom=Number(textSize.value)/100;
+
   const images=[...document.images];
 
   await Promise.all(images.map(img=> {
@@ -171,7 +178,6 @@ async function renderPreview() {
   try {
     setStatus("Rendering...");
     updateHtmlHash();
-    await renderDOM();
     if (generation!==renderGeneration)return null;
     const canvas=await html2canvas(await renderDOM(), {
       backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
@@ -443,7 +449,6 @@ connectBtn.addEventListener("click",async()=> {
 printBtn.addEventListener("click",async()=> {
   try {
     setStatus("Rendering for print...");
-    await renderDOM();
     const canvas=await html2canvas(await renderDOM(), {
       backgroundColor:"#ffffff",width:PRINT_WIDTH,scale:1,useCORS:true,allowTaint:false,logging:false
     });

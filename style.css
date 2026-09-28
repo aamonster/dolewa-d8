@@ -98,40 +98,6 @@ button {
     font-size: 12px;
 }
 
-#renderTarget {
-    position: absolute;
-    left: -10000px;
-    top: 0;
-    width: 384px;
-    min-height: 1px;
-    padding: 8px;
-    background: white;
-    color: black;
-    font-family: Arial, sans-serif;
-    font-size: 24pt;
-    line-height: 1.2;
-    --text-scale: 1;
-    overflow: visible;
-}
-
-#renderFrame img {
-    max-width: 100%;
-}
-
-#renderFrame table {
-    border-collapse: collapse;
-}
-
-#renderFrame td,
-#renderFrame th {
-    border: 1px solid #000;
-    padding: 2px 4px;
-}
-
-#renderFrame pre {
-    white-space: pre-wrap;
-}
-
 @media (max-width: 424px) {
     body {
         padding-left: 8px;
