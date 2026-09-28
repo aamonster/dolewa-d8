@@ -260,7 +260,7 @@ function rasterize(canvas) {
   });
   const actualWidth=Math.min(width,canvas.width);
   const imageData=ctx.getImageData(0,0,actualWidth,height);
-  const bytesPerRow=Math.ceil(actualWidth/8);
+  const bytesPerRow=Math.ceil(width/8);
   const data=new Uint8Array(bytesPerRow*height);
   const baseThreshold=Number(darkness.value);
   const useDithering=dithering.checked;
@@ -278,6 +278,17 @@ function rasterize(canvas) {
       else gray=0.299*r+0.587*g+0.114*b;
       let threshold=baseThreshold;
       if (useDithering) {
+        // Keep pure white/black unchanged even when dithering shifts the threshold.
+        // Darkness=255 must leave white pixels white; Darkness=0 must leave black pixels black.
+        if (gray===255) {
+          continue;
+        }
+        if (gray===0) {
+          const byteIndex=y*Math.ceil(PRINT_WIDTH/8)+(x>>3);
+          const bit=7-(x&7);
+          data[byteIndex]|=(1<<bit);
+          continue;
+        }
         const dither=(DITHER_4x4[y&3][x&3]-7.5)*8;
         threshold+=dither;
         if (contrastAmount>=1) {
@@ -297,7 +308,7 @@ function rasterize(canvas) {
     }
   }
   return  {
-    width:actualWidth,height,bytesPerRow,data
+    width,height,bytesPerRow,data
   };
 }
 function showPreview(raster) {
