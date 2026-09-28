@@ -39,7 +39,7 @@ function debug(message, data) {
     }
   }
   console.log("[BLE DEBUG]", line);
-  debugLog.textContent += line + "\\n";
+  debugLog.textContent += line + "\n";
   debugLog.scrollTop = debugLog.scrollHeight;
 }
 debugCheck.addEventListener("change", () => {
@@ -564,6 +564,7 @@ connectBtn.addEventListener("click",async()=> {
     await connectPrinter();
   }
   catch (e) {
+    debug("Connection failed", {name:e.name, message:e.message, stack:e.stack});
     console.error(e);
     setStatus("Connection error: "+e.message);
   }
