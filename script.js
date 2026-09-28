@@ -268,7 +268,7 @@ function waitForPacket(timeout=5000) {
 }
 async function writeBytes(bytes) {
   console.log("TX:",bytesToHex(bytes));
-  await writeCharacteristic.writeValue(new Uint8Array(bytes));
+  await writeCharacteristic.writeValueWithResponse(new Uint8Array(bytes));
 }
 function crc16Xmodem(data) {
   let crc=0x0000;
