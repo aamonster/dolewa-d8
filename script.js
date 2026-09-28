@@ -197,35 +197,33 @@ async function renderCanvas() {
     serialized+
     '</foreignObject></svg>';
 
-  const blob=new Blob([svg],{type:"image/svg+xml"});
-  const url=URL.createObjectURL(blob);
+  // Use a data URL instead of a blob URL. The SVG contains the serialized
+  // document itself, so no external resource needs to be fetched.
+  const url="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
 
-  try {
-    const image=new Image();
-    await new Promise((resolve,reject)=> {
-      image.onload=resolve;
-      image.onerror=()=>reject(new Error("SVG DOM render failed"));
-      image.src=url;
-    });
+  const image=new Image();
+  await new Promise((resolve,reject)=> {
+    image.onload=resolve;
+    image.onerror=()=>reject(new Error("SVG DOM render failed"));
+    image.src=url;
+  });
 
-    const canvas=document.createElement("canvas");
+  const canvas=document.createElement("canvas");
     canvas.width=Math.max(1,Math.round(width*scaleFactor));
     canvas.height=Math.max(1,Math.round(height*scaleFactor));
     const ctx=canvas.getContext("2d");
     ctx.fillStyle="#ffffff";
     ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(image,0,0,canvas.width,canvas.height);
-    return canvas;
-  }
-  finally {
-    URL.revokeObjectURL(url);
-  }
+  ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  return canvas;
 }
 async function renderPreview() {
   const generation=++renderGeneration;
   try {
     setStatus("Rendering...");
     updateHtmlHash();
+    if (generation!==renderGeneration)return null;
+    await renderDOM();
     if (generation!==renderGeneration)return null;
     const canvas=await renderCanvas();
     if (generation!==renderGeneration)return null;
