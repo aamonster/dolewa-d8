@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dolewa D8 Mini — Rich Text Printer</title>
+
+<!-- Browser DOM → canvas renderer -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        padding: 20px;
+        background: #e8e8e8;
+        font-family: Arial, sans-serif;
+        color: #222;
+    }
+
+    h1 {
+        margin: 0 0 15px;
+        font-size: 22px;
+    }
+
+    .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 10px;
+        width: 384px;
+    }
+
+    button {
+        font: inherit;
+        padding: 5px 9px;
+        cursor: pointer;
+    }
+
+    .editor-wrap {
+        width: 384px;
+        background: white;
+        box-shadow: 0 1px 5px #999;
+    }
+
+    #editor {
+        width: 384px;
+        min-height: 100px;
+        padding: 8px;
+        outline: none;
+
+        background: white;
+        color: black;
+
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        line-height: 1.2;
+
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+
+    /*
+     * Keep images inside the thermal-paper width.
+     * The actual available width is 368px because of the 8px padding.
+     */
+    #editor img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    #editor table {
+        max-width: 100%;
+        border-collapse: collapse;
+    }
+
+    #editor td,
+    #editor th {
+        border: 1px solid black;
+        padding: 2px 4px;
+    }
+
+    #editor pre {
+        white-space: pre-wrap;
+    }
+
+    .actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .status {
+        margin-top: 15px;
+        width: 700px;
+        max-width: 100%;
+        background: #111;
+        color: #0f0;
+        font: 12px monospace;
+        padding: 10px;
+        white-space: pre-wrap;
+        min-height: 100px;
+        max-height: 350px;
+        overflow: auto;
+    }
+
+    .preview-title {
+        margin-top: 25px;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    #preview {
+        display: block;
+        background: white;
+        box-shadow: 0 1px 5px #999;
+        image-rendering: pixelated;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .info {
+        margin-top: 8px;
+        font: 13px monospace;
+    }
+</style>
+
+</head>
+
+<body>
+
+<h1>Dolewa D8 Mini — Rich Text</h1>
+
+<div class="toolbar">
+    <button onclick="format('bold')"><b>B</b></button>
+    <button onclick="format('italic')"><i>I</i></button>
+    <button onclick="format('underline')"><u>U</u></button>
+
+```
+<button onclick="format('justifyLeft')">←</button>
+<button onclick="format('justifyCenter')">↔</button>
+<button onclick="format('justifyRight')">→</button>
+
+<button onclick="format('insertUnorderedList')">• List</button>
+
+<button onclick="changeFontSize(1)">A+</button>
+<button onclick="changeFontSize(-1)">A−</button>
+
+<button onclick="format('removeFormat')">Clear format</button>
+```
+
+</div>
+
+<div class="editor-wrap">
+    <div id="editor"
+         contenteditable="true"
+         spellcheck="false">
+        <div>Paste or type something here...</div>
+    </div>
+</div>
+
+<div class="actions">
+    <button onclick="renderPreview()">Render preview</button>
+    <button onclick="printDocument()">Print</button>
+    <button onclick="clearEditor()">Clear</button>
+</div>
+
+<div class="preview-title">Printer bitmap preview</div>
+<canvas id="preview"></canvas>
+
+<div class="info" id="info"></div>
+
+<pre class="status" id="status"></pre>
+
+<script>
+/* ============================================================
+   UI / EDITOR
+   ============================================================ */
+
+const editor = document.getElementById("editor");
+const preview = document.getElementById("preview");
+const info = document.getElementById("info");
+const statusBox = document.getElementById("status");
+
+function log(...args) {
+    const line = args.map(x =>
+        typeof x === "string" ? x : JSON.stringify(x)
+    ).join(" ");
+
+    statusBox.textContent += line + "\n";
+    statusBox.scrollTop = statusBox.scrollHeight;
+}
+
+function clearLog() {
+    statusBox.textContent = "";
+}
+
+function format(command) {
+    editor.focus();
+    document.execCommand(command, false, null);
+}
+
+function changeFontSize(delta) {
+    editor.focus();
+
+    /*
+     * execCommand('fontSize') uses browser-defined 1..7 sizes.
+     * This is deliberately simple; normal paste retains its
+     * original HTML/CSS where possible.
+     */
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+        return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    let node = range.commonAncestorContainer;
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+        node = node.parentElement;
+    }
+
+    let current = parseInt(
+        getComputedStyle(node).fontSize,
+        10
+    );
+
+    if (!Number.isFinite(current)) {
+        current = 16;
+    }
+
+    const newSize = Math.max(
+        6,
+        Math.min(96, current + delta * 2)
+    );
+
+    /*
+     * Surround selection with a span.
+     * This works better than browser's deprecated fontSize
+     * command for arbitrary sizes.
+     */
+    if (!selection.isCollapsed) {
+        const span = document.createElement("span");
+        span.style.fontSize = newSize + "px";
+
+        try {
+            range.surroundContents(span);
+        } catch {
+            document.execCommand("fontSize", false, "4");
+        }
+    } else {
+        document.execCommand("fontSize", false, "4");
+    }
+}
+
+function clearEditor() {
+    editor.innerHTML = "";
+    renderPreview();
+}
+
+
+/* ============================================================
+   IMAGE HANDLING
+   ============================================================ */
+
+/*
+ * When an image is pasted from the clipboard, browsers can
+ * provide it as an actual image file.
+ *
+ * contenteditable normally handles many image pastes itself,
+ * but this handler makes sure bitmap clipboard images become
+ * embedded data URLs. This also makes html2canvas much more
+ * reliable because there is no external network resource.
+ */
+
+editor.addEventListener("paste", async event => {
+    const items = event.clipboardData?.items;
+
+    if (!items) {
+        return;
+    }
+
+    for (const item of items) {
+        if (!item.type.startsWith("image/")) {
+            continue;
+        }
+
+        event.preventDefault();
+
+        const file = item.getAsFile();
+
+        if (!file) {
+            return;
+        }
+
+        const dataUrl = await fileToDataURL(file);
+
+        insertImageAtCursor(dataUrl);
+
+        return;
+    }
+
+    /*
+     * Normal text/HTML paste is left completely to the browser.
+     */
+});
+
+function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+
+        reader.readAsDataURL(file);
+    });
+}
+
+function insertImageAtCursor(src) {
+    const img = document.createElement("img");
+
+    img.src = src;
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+        editor.appendChild(img);
+        return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    /*
+     * Make sure insertion happens inside our editor.
+     */
+    if (!editor.contains(range.commonAncestorContainer)) {
+        editor.appendChild(img);
+        return;
+    }
+
+    range.deleteContents();
+    range.insertNode(img);
+
+    range.setStartAfter(img);
+    range.collapse(true);
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+
+/* ============================================================
+   WAIT FOR IMAGES
+   ============================================================ */
+
+async function waitForImages(root) {
+    const images = Array.from(root.querySelectorAll("img"));
+
+    await Promise.all(
+        images.map(img => {
+            if (img.complete && img.naturalWidth > 0) {
+                return Promise.resolve();
+            }
+
+            return new Promise(resolve => {
+                img.addEventListener("load", resolve, { once: true });
+                img.addEventListener("error", resolve, { once: true });
+            });
+        })
+    );
+}
+
+
+/* ============================================================
+   DOM → CANVAS
+   ============================================================ */
+
+/*
+ * Important:
+ *
+ * We DO NOT calculate text layout ourselves.
+ *
+ * Chrome has already laid out the contenteditable DOM.
+ * html2canvas reads that layout and paints it onto a canvas.
+ *
+ * This means:
+ *
+ *   text wrapping
+ *   fonts
+ *   bold
+ *   italic
+ *   underline
+ *   lists
+ *   alignment
+ *   images
+ *   tables
+ *   colors
+ *   background
+ *   many CSS properties
+ *
+ * are handled by the browser/html2canvas rather than by our
+ * own text renderer.
+ */
+
+async function renderDOM() {
+    if (typeof html2canvas !== "function") {
+        throw new Error(
+            "html2canvas failed to load. Check Internet connection."
+        );
+    }
+
+    await waitForImages(editor);
+
+    /*
+     * Temporarily remove the editor's focus outline/caret
+     * and any selection highlight.
+     */
+    const oldActive = document.activeElement;
+
+    editor.blur();
+
+    /*
+     * html2canvas renders the actual DOM at its current CSS size.
+     *
+     * Width is exactly 384 CSS pixels, which corresponds to the
+     * printer's 384 thermal dots.
+     */
+    const canvas = await html2canvas(editor, {
+        backgroundColor: "#ffffff",
+
+        width: 384,
+
+        /*
+         * Do not use devicePixelRatio here.
+         *
+         * One CSS pixel -> one printer dot.
+         */
+        scale: 1,
+
+        useCORS: true,
+        allowTaint: false,
+
+        logging: false,
+
+        /*
+         * Remove browser artifacts.
+         */
+        onclone: clonedDocument => {
+            const clonedEditor =
+                clonedDocument.getElementById("editor");
+
+            if (clonedEditor) {
+                clonedEditor.style.caretColor = "transparent";
+                clonedEditor.style.outline = "none";
+            }
+        }
+    });
+
+    if (oldActive === editor) {
+        editor.focus();
+    }
+
+    return canvas;
+}
+
+
+/* ============================================================
+   CANVAS → THERMAL 1-BIT
+   ============================================================ */
+
+/*
+ * Convert browser-rendered grayscale image to printer raster.
+ *
+ * Printer:
+ *   384 dots wide
+ *   MSB first
+ *   black pixel = 1
+ *
+ * A small ordered dithering matrix is used instead of a simple
+ * threshold. This makes photographs and antialiased text much
+ * more useful on the 1-bit thermal head.
+ */
+
+const DITHER_4x4 = [
+    [ 0,  8,  2, 10],
+    [12,  4, 14,  6],
+    [ 3, 11,  1,  9],
+    [15,  7, 13,  5]
+];
+
+function canvasToRaster(canvas) {
+    const width = 384;
+    const height = canvas.height;
+
+    /*
+     * Printer data is one byte per 8 horizontal pixels.
+     */
+    const rowBytes = width >> 3;
+    const raster = new Uint8Array(rowBytes * height);
+
+    const ctx = canvas.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    const imageData = ctx.getImageData(
+        0,
+        0,
+        width,
+        height
+    );
+
+    const pixels = imageData.data;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+
+            const p = (y * width + x) * 4;
+
+            const r = pixels[p];
+            const g = pixels[p + 1];
+            const b = pixels[p + 2];
+            const a = pixels[p + 3];
+
+            /*
+             * Composite transparency onto white.
+             */
+            const alpha = a / 255;
+
+            const rr = r * alpha + 255 * (1 - alpha);
+            const gg = g * alpha + 255 * (1 - alpha);
+            const bb = b * alpha + 255 * (1 - alpha);
+
+            const luminance =
+                0.299 * rr +
+                0.587 * gg +
+                0.114 * bb;
+
+            /*
+             * Ordered dithering threshold.
+             *
+             * For pure black/white text this has practically
+             * no effect. For images it gives intermediate gray
+             * levels.
+             */
+            const matrixValue =
+                DITHER_4x4[y & 3][x & 3];
+
+            const threshold =
+                128 + (matrixValue - 7.5) * 8;
+
+            const black = luminance < threshold;
+
+            if (black) {
+                const byteIndex =
+                    y * rowBytes + (x >> 3);
+
+                /*
+                 * MSB first:
+                 *
+                 * x=0 -> bit 7
+                 * x=1 -> bit 6
+                 * ...
+                 * x=7 -> bit 0
+                 */
+                raster[byteIndex] |=
+                    1 << (7 - (x & 7));
+            }
+        }
+    }
+
+    return {
+        width,
+        height,
+        rowBytes,
+        raster
+    };
+}
+
+
+/* ============================================================
+   PREVIEW
+   ============================================================ */
+
+async function renderPreview() {
+    clearLog();
+
+    try {
+        log("Rendering browser DOM...");
+
+        const rendered = await renderDOM();
+
+        log(
+            "Browser canvas:",
+            rendered.width + " × " + rendered.height
+        );
+
+        const thermal = canvasToRaster(rendered);
+
+        /*
+         * Display the actual 1-bit raster that will be sent
+         * to the printer.
+         */
+        preview.width = thermal.width;
+        preview.height = thermal.height;
+
+        const ctx = preview.getContext("2d");
+
+        const previewImage =
+            ctx.createImageData(
+                thermal.width,
+                thermal.height
+            );
+
+        for (let y = 0; y < thermal.height; y++) {
+            for (let x = 0; x < thermal.width; x++) {
+
+                const byte =
+                    thermal.raster[
+                        y * thermal.rowBytes +
+                        (x >> 3)
+                    ];
+
+                const bit =
+                    byte & (1 << (7 - (x & 7)));
+
+                const value = bit ? 0 : 255;
+
+                const p =
+                    (y * thermal.width + x) * 4;
+
+                previewImage.data[p] = value;
+                previewImage.data[p + 1] = value;
+                previewImage.data[p + 2] = value;
+                previewImage.data[p + 3] = 255;
+            }
+        }
+
+        ctx.putImageData(previewImage, 0, 0);
+
+        const physicalWidth =
+            thermal.width / 8;
+
+        const physicalHeight =
+            thermal.height / 8;
+
+        const totalBytes =
+            thermal.raster.length;
+
+        const packetCount =
+            Math.ceil(totalBytes / 96);
+
+        info.textContent =
+            `Raster: ${thermal.width} × ${thermal.height} px | ` +
+            `Physical: ${physicalWidth.toFixed(2)} × ` +
+            `${physicalHeight.toFixed(2)} mm | ` +
+            `Bytes: ${totalBytes} | ` +
+            `Packets: ${packetCount}`;
+
+        log(
+            `Physical size: ${physicalWidth.toFixed(2)} × ` +
+            `${physicalHeight.toFixed(2)} mm`
+        );
+
+        log(`Raster bytes: ${totalBytes}`);
+        log(`Image packets: ${packetCount}`);
+
+        return thermal;
+
+    } catch (e) {
+        log("ERROR:", e?.message || String(e));
+        console.error(e);
+        throw e;
+    }
+}
+
+
+/* ============================================================
+   BLE
+   ============================================================ */
+
+const SERVICE_UUID =
+    "0000ffe6-0000-1000-8000-00805f9b34fb";
+
+const WRITE_UUID =
+    "0000ffe1-0000-1000-8000-00805f9b34fb";
+
+const NOTIFY_UUID =
+    "0000ffe2-0000-1000-8000-00805f9b34fb";
+
+let device = null;
+let server = null;
+let writeCharacteristic = null;
+let notifyCharacteristic = null;
+
+let rxQueue = [];
+let rxWaiters = [];
+
+
+/* ============================================================
+   HEX HELPERS
+   ============================================================ */
+
+function hex(data) {
+    return Array.from(data)
+        .map(x => x.toString(16).padStart(2, "0"))
+        .join(" ");
+}
+
+function bytes(...values) {
+    return new Uint8Array(values);
+}
+
+function concatBytes(...arrays) {
+    let length = 0;
+
+    for (const a of arrays) {
+        length += a.length;
+    }
+
+    const result = new Uint8Array(length);
+
+    let offset = 0;
+
+    for (const a of arrays) {
+        result.set(a, offset);
+        offset += a.length;
+    }
+
+    return result;
+}
+
+
+/* ============================================================
+   CRC16-XMODEM
+   ============================================================ */
+
+function crc16Xmodem(data) {
+    let crc = 0;
+
+    for (const value of data) {
+        crc ^= value << 8;
+
+        for (let i = 0; i < 8; i++) {
+            if (crc & 0x8000) {
+                crc =
+                    ((crc << 1) ^ 0x1021) &
+                    0xffff;
+            } else {
+                crc =
+                    (crc << 1) &
+                    0xffff;
+            }
+        }
+    }
+
+    return crc;
+}
+
+
+/* ============================================================
+   RX QUEUE
+   ============================================================ */
+
+function onNotification(event) {
+    const data =
+        new Uint8Array(
+            event.target.value.buffer.slice(0)
+        );
+
+    /*
+     * Keep unsolicited telemetry out of the normal protocol
+     * queue.
+     */
+    if (
+        data.length >= 2 &&
+        data[0] === 0x5a &&
+        data[1] === 0x02
+    ) {
+        log("RX telemetry:", hex(data));
+        return;
+    }
+
+    log("RX:", hex(data));
+
+    /*
+     * Retry request.
+     */
+    if (
+        data.length >= 2 &&
+        data[0] === 0x5a &&
+        data[1] === 0x05
+    ) {
+        log("RX retry request:", hex(data));
+    }
+
+    /*
+     * Delay hint.
+     */
+    if (
+        data.length >= 2 &&
+        data[0] === 0x5a &&
+        data[1] === 0x07
+    ) {
+        log("RX delay hint:", hex(data));
+    }
+
+    if (rxWaiters.length) {
+        const waiter = rxWaiters.shift();
+        waiter(data);
+    } else {
+        rxQueue.push(data);
+    }
+}
+
+function waitForPacket(timeout = 5000) {
+    if (rxQueue.length) {
+        return Promise.resolve(
+            rxQueue.shift()
+        );
+    }
+
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const index =
+                rxWaiters.indexOf(waiter);
+
+            if (index >= 0) {
+                rxWaiters.splice(index, 1);
+            }
+
+            reject(
+                new Error("BLE response timeout")
+            );
+        }, timeout);
+
+        function waiter(data) {
+            clearTimeout(timer);
+            resolve(data);
+        }
+
+        rxWaiters.push(waiter);
+    });
+}
+
+
+/* ============================================================
+   BLE WRITE
+   ============================================================ */
+
+async function bleWrite(data) {
+    log(
+        "TX:",
+        `${hex(data.slice(0, 12))}` +
+        (data.length > 12 ? ` ... (${data.length} bytes)` : "")
+    );
+
+    await writeCharacteristic.writeValue(data);
+}
+
+
+/* ============================================================
+   CONNECT
+   ============================================================ */
+
+async function connectPrinter() {
+    log("Requesting D8...");
+
+    device = await navigator.bluetooth.requestDevice({
+        filters: [
+            {
+                name: "LX-D08",
+            }
+        ],
+        optionalServices: [SERVICE_UUID]
+    });
+
+    log("Found:", device.name);
+
+    device.addEventListener(
+        "gattserverdisconnected",
+        () => {
+            log("BLE disconnected");
+        }
+    );
+
+    server = await device.gatt.connect();
+
+    const service =
+        await server.getPrimaryService(
+            SERVICE_UUID
+        );
+
+    writeCharacteristic =
+        await service.getCharacteristic(
+            WRITE_UUID
+        );
+
+    notifyCharacteristic =
+        await service.getCharacteristic(
+            NOTIFY_UUID
+        );
+
+    notifyCharacteristic.addEventListener(
+        "characteristicvaluechanged",
+        onNotification
+    );
+
+    await notifyCharacteristic.startNotifications();
+
+    log("Connected");
+    log("GATT ready");
+    log("Notifications enabled");
+}
+
+
+/* ============================================================
+   HANDSHAKE
+   ============================================================ */
+
+async function handshake() {
+    /*
+     * Ask printer for status.
+     */
+    await bleWrite(
+        bytes(0x5a, 0x01, 0x00)
+    );
+
+    const status =
+        await waitForPacket();
+
+    log("Status:", hex(status));
+
+    if (
+        status.length < 10 ||
+        status[0] !== 0x5a ||
+        status[1] !== 0x01
+    ) {
+        throw new Error(
+            "Invalid printer status"
+        );
+    }
+
+    /*
+     * MAC is bytes 4..9.
+     */
+    const mac =
+        status.slice(4, 10);
+
+    log("MAC:", hex(mac));
+
+    /*
+     * Ten random challenge bytes.
+     */
+    const random = new Uint8Array(10);
+
+    crypto.getRandomValues(random);
+
+    for (let i = 0; i < random.length; i++) {
+        /*
+         * Values 0x00 and 0xff are avoided.
+         */
+        if (random[i] === 0) {
+            random[i] = 1;
+        }
+
+        if (random[i] === 0xff) {
+            random[i] = 0xfe;
+        }
+    }
+
+    /*
+     * 5A 0A + random bytes
+     */
+    await bleWrite(
+        concatBytes(
+            bytes(0x5a, 0x0a),
+            random
+        )
+    );
+
+    const lowResponse =
+        await waitForPacket();
+
+    log(
+        "Handshake low:",
+        hex(lowResponse)
+    );
+
+    if (
+        lowResponse.length < 12 ||
+        lowResponse[0] !== 0x5a ||
+        lowResponse[1] !== 0x0a
+    ) {
+        throw new Error(
+            "Invalid handshake low response"
+        );
+    }
+
+    /*
+     * Calculate ten CRCs.
+     *
+     * CRC16-XMODEM over:
+     *
+     *   randomByte + 6-byte MAC
+     *
+     * Printer expects low bytes first.
+     */
+    const low = new Uint8Array(10);
+    const high = new Uint8Array(10);
+
+    for (let i = 0; i < 10; i++) {
+        const input =
+            concatBytes(
+                bytes(random[i]),
+                mac
+            );
+
+        const crc =
+            crc16Xmodem(input);
+
+        low[i] =
+            crc & 0xff;
+
+        high[i] =
+            (crc >> 8) & 0xff;
+    }
+
+    /*
+     * The printer's low response is useful as a diagnostic.
+     */
+    for (let i = 0; i < 10; i++) {
+        if (
+            lowResponse[2 + i] !== low[i]
+        ) {
+            log(
+                `WARNING: handshake CRC low mismatch at ${i}:`,
+                lowResponse[2 + i],
+                low[i]
+            );
+        }
+    }
+
+    /*
+     * 5A 0B + ten HIGH CRC bytes.
+     */
+    await bleWrite(
+        concatBytes(
+            bytes(0x5a, 0x0b),
+            high
+        )
+    );
+
+    const finalResponse =
+        await waitForPacket();
+
+    log(
+        "Handshake final:",
+        hex(finalResponse)
+    );
+
+    if (
+        finalResponse.length < 3 ||
+        finalResponse[0] !== 0x5a ||
+        finalResponse[1] !== 0x0b ||
+        finalResponse[2] !== 0x01
+    ) {
+        throw new Error(
+            "Printer handshake failed"
+        );
+    }
+
+    log("Handshake OK");
+
+    /*
+     * Darkness level.
+     *
+     * Level 4 -> command value 3.
+     */
+    await bleWrite(
+        bytes(0x5a, 0x0c, 0x03)
+    );
+
+    const darknessResponse =
+        await waitForPacket();
+
+    log(
+        "Darkness response:",
+        hex(darknessResponse)
+    );
+}
+
+
+/* ============================================================
+   PRINT IMAGE
+   ============================================================ */
+
+async function sendRaster(thermal) {
+    const blockSize = 96;
+
+    const total =
+        Math.ceil(
+            thermal.raster.length /
+            blockSize
+        );
+
+    log(
+        `Sending ${total} image packets...`
+    );
+
+    /*
+     * Header:
+     *
+     * 5A 04
+     * total (u16 BE)
+     * 00 00
+     */
+    await bleWrite(
+        bytes(
+            0x5a,
+            0x04,
+            (total >> 8) & 0xff,
+            total & 0xff,
+            0x00,
+            0x00
+        )
+    );
+
+    /*
+     * All image packets are sent FIRST.
+     *
+     * Only after the complete image has been transferred
+     * do we wait for 5A 06.
+     */
+    for (let index = 0; index < total; index++) {
+
+        const start =
+            index * blockSize;
+
+        const end =
+            Math.min(
+                start + blockSize,
+                thermal.raster.length
+            );
+
+        const block =
+            new Uint8Array(blockSize);
+
+        block.set(
+            thermal.raster.slice(start, end)
+        );
+
+        /*
+         * Packet:
+         *
+         * 55
+         * index u16 BE
+         * 96 bytes data
+         * 00
+         */
+        const packet =
+            new Uint8Array(100);
+
+        packet[0] = 0x55;
+
+        packet[1] =
+            (index >> 8) & 0xff;
+
+        packet[2] =
+            index & 0xff;
+
+        packet.set(block, 3);
+
+        packet[99] = 0x00;
+
+        /*
+         * TiMini's funny_lx driver uses 20ms between
+         * image packets for this printer family.
+         */
+        await new Promise(
+            resolve => setTimeout(resolve, 20)
+        );
+
+        await bleWrite(packet);
+
+        /*
+         * Do not spam the log with every packet.
+         */
+        if (
+            index === 0 ||
+            index === total - 1 ||
+            ((index + 1) % 10) === 0
+        ) {
+            log(
+                `Packet ${index + 1}/${total}`
+            );
+        }
+    }
+
+    /*
+     * Printer signals that image data is ready.
+     */
+    log("Waiting for 5A 06...");
+
+    let ready;
+
+    for (;;) {
+        ready =
+            await waitForPacket(10000);
+
+        /*
+         * 5A 06 = image transfer ready.
+         */
+        if (
+            ready.length >= 2 &&
+            ready[0] === 0x5a &&
+            ready[1] === 0x06
+        ) {
+            break;
+        }
+
+        /*
+         * Ignore unrelated asynchronous packets.
+         */
+        log(
+            "Ignoring packet while waiting:",
+            hex(ready)
+        );
+    }
+
+    /*
+     * Footer:
+     *
+     * 5A 04
+     * total u16 BE
+     * 01
+     */
+    await bleWrite(
+        bytes(
+            0x5a,
+            0x04,
+            (total >> 8) & 0xff,
+            total & 0xff,
+            0x01
+        )
+    );
+
+    log("Print command sent");
+}
+
+
+/* ============================================================
+   PRINT DOCUMENT
+   ============================================================ */
+
+async function printDocument() {
+    clearLog();
+
+    try {
+        /*
+         * Render exactly what the browser lays out.
+         */
+        log("Rendering document...");
+
+        const rendered =
+            await renderDOM();
+
+        const thermal =
+            canvasToRaster(rendered);
+
+        /*
+         * Update preview with the exact raster being sent.
+         */
+        preview.width =
+            thermal.width;
+
+        preview.height =
+            thermal.height;
+
+        const ctx =
+            preview.getContext("2d");
+
+        const image =
+            ctx.createImageData(
+                thermal.width,
+                thermal.height
+            );
+
+        for (let y = 0;
+             y < thermal.height;
+             y++) {
+
+            for (let x = 0;
+                 x < thermal.width;
+                 x++) {
+
+                const byte =
+                    thermal.raster[
+                        y * thermal.rowBytes +
+                        (x >> 3)
+                    ];
+
+                const black =
+                    byte &
+                    (1 << (7 - (x & 7)));
+
+                const value =
+                    black ? 0 : 255;
+
+                const p =
+                    (y * thermal.width + x) * 4;
+
+                image.data[p] = value;
+                image.data[p + 1] = value;
+                image.data[p + 2] = value;
+                image.data[p + 3] = 255;
+            }
+        }
+
+        ctx.putImageData(image, 0, 0);
+
+        const physicalWidth =
+            thermal.width / 8;
+
+        const physicalHeight =
+            thermal.height / 8;
+
+        info.textContent =
+            `Raster: ${thermal.width} × ${thermal.height} px | ` +
+            `Physical: ${physicalWidth.toFixed(2)} × ` +
+            `${physicalHeight.toFixed(2)} mm | ` +
+            `Bytes: ${thermal.raster.length}`;
+
+        log(
+            `Rendering: ${thermal.width} × ` +
+            `${thermal.height} px`
+        );
+
+        log(
+            `Physical size: ` +
+            `${physicalWidth.toFixed(2)} × ` +
+            `${physicalHeight.toFixed(2)} mm`
+        );
+
+        log(
+            `Raster bytes: ${thermal.raster.length}`
+        );
+
+        /*
+         * Connect.
+         */
+        await connectPrinter();
+
+        /*
+         * Authenticate.
+         */
+        await handshake();
+
+        /*
+         * Send bitmap.
+         */
+        await sendRaster(thermal);
+
+        log("DONE");
+
+    } catch (e) {
+        log(
+            "ERROR:",
+            e?.message || String(e)
+        );
+
+        console.error(e);
+    }
+}
+
+
+/* ============================================================
+   INITIAL PREVIEW
+   ============================================================ */
+
+window.addEventListener("load", () => {
+    /*
+     * Do not automatically ask for BLE permission.
+     */
+    renderPreview().catch(console.error);
+});
+
+</script>
+
+</body>
+</html>
