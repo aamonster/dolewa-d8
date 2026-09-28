@@ -16,12 +16,12 @@ h1 {
 
 #editor {
     display: block;
-    width: 384px;
+    width: min(384px, 100%);
     min-height: 180px;
     padding: 8px;
     border: 1px solid #999;
     background: white;
-    font: 16px/1.2 Arial, sans-serif;
+    font: 24pt/1.2 Arial, sans-serif;
     resize: vertical;
 }
 
@@ -74,6 +74,9 @@ button {
 
 #previewCanvas {
     display: block;
+    width: min(384px, 100%);
+    max-width: 100%;
+    height: auto;
     background: white;
     image-rendering: pixelated;
     border: 1px solid #999;
@@ -105,7 +108,7 @@ button {
     background: white;
     color: black;
     font-family: Arial, sans-serif;
-    font-size: 16px;
+    font-size: 24pt;
     line-height: 1.2;
     overflow: visible;
 }
@@ -126,4 +129,11 @@ button {
 
 #renderTarget pre {
     white-space: pre-wrap;
+}
+
+@media (max-width: 424px) {
+    body {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
 }
