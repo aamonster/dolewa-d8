@@ -31,8 +31,8 @@ function encodeBase64UTF8(str) {
   }
 
   return btoa(binary)
-    .replace(/\\+/g, "-")
-    .replace(/\\//g, "_")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
